@@ -36,7 +36,8 @@ awk '{print $(NF)}' access.log | sort | uniq -c | sort -nr
 ```
 
 **Figure 1 – User-Agent frequency analysis**
-`screenshots/image_1.png`
+
+![User-Agent frequency analysis](screenshots/image_1.png)
 
 The output reveals a clear pattern: Hydra was the most frequently used tool, followed by Firefox/78.0 (likely manual browsing), sqlmap, nmap (via NSE scripts), feroxbuster, and curl. The presence of `"_"` suggests a malformed or custom User-Agent.
 
@@ -56,7 +57,8 @@ The output reveals a clear pattern: Hydra was the most frequently used tool, fol
 The attacker used sqlmap to probe the `/rest/products/search` endpoint with various malicious payloads designed to test for SQL injection vulnerabilities.
 
 **Figure 2 – SQL injection attempts with sqlmap**
-`screenshots/image_2.png`
+
+![SQL injection attempts with sqlmap](screenshots/image_2.png)
 
 The logs show a high volume of GET requests to `/rest/products/search` with the `q` parameter containing SQL injection payloads. Examples include:
 
@@ -67,7 +69,8 @@ The logs show a high volume of GET requests to `/rest/products/search` with the 
 The endpoint consistently returned `200 OK` responses, confirming that the application was processing the malicious input and returning data, indicating a successful SQL injection vulnerability.
 
 **Figure 3 – Cleaner SQL injection payloads (ORDER BY and UNION SELECT)**
-`screenshots/image_6.png`
+
+![Cleaner SQL injection payloads](screenshots/image_6.png)
 
 The attacker subsequently used UNION SELECT payloads to extract data from the Users table:
 
@@ -82,7 +85,8 @@ q=qwert'%29 UNION SELECT id, email, password, '4', '5', '6', '7', '8', '9' FROM 
 ```
 
 **Figure 4 – UNION SELECT payload extracting id, email, password**
-`screenshots/image_6.png`
+
+![UNION SELECT payload extracting id, email, password](screenshots/image_6.png)
 
 The `200` response status confirms that the query was executed successfully, allowing the attacker to retrieve user email addresses and password hashes.
 
@@ -93,7 +97,8 @@ The `200` response status confirms that the query was executed successfully, all
 The attacker used feroxbuster and manual browsing to enumerate the web application's directory structure and locate sensitive files.
 
 **Figure 5 – Feroxbuster directory enumeration on /ftp**
-`screenshots/image_3.png`
+
+![Feroxbuster directory enumeration on /ftp](screenshots/image_3.png)
 
 The tool discovered the `/ftp` directory and identified two backup files:
 
@@ -101,7 +106,8 @@ The tool discovered the `/ftp` directory and identified two backup files:
 - `/ftp/coupons_2013.md.bak` – returned `403 Forbidden` (78,965 bytes)
 
 **Figure 6 – FTP access attempts with feroxbuster**
-`screenshots/image_7.png`
+
+![FTP access attempts with feroxbuster](screenshots/image_7.png)
 
 The logs confirm that `feroxbuster/2.2.1` was used to probe the `/ftp` directory, while Firefox/78.0 was used to attempt direct access to the backup files, both of which initially returned `403 Forbidden`.
 
@@ -112,7 +118,8 @@ The logs confirm that `feroxbuster/2.2.1` was used to probe the `/ftp` directory
 The attacker also performed reconnaissance on other web application endpoints, likely to understand the application's functionality and identify further attack vectors.
 
 **Figure 7 – Reconnaissance on /rest/products and /rest/products/1/reviews**
-`screenshots/image_4.png`
+
+![Reconnaissance on /rest/products and /rest/products/1/reviews](screenshots/image_4.png)
 
 The logs show:
 
@@ -122,7 +129,8 @@ The logs show:
 - `GET /rest/basket/1` – checking the shopping basket for user ID 1
 
 **Figure 8 – User and basket information requests**
-`screenshots/image_5.png`
+
+![User and basket information requests](screenshots/image_5.png)
 
 These requests returned `200 OK` responses, indicating that the endpoints were accessible and likely leaking information.
 
@@ -133,7 +141,8 @@ These requests returned `200 OK` responses, indicating that the endpoints were a
 The attacker leveraged the FTP service to download sensitive backup files from the server. Analysis of the `vsftpd.log` reveals the sequence of events.
 
 **Figure 9 – vsftpd.log – FTP login attempts and successes**
-`screenshots/image_8.png`
+
+![vsftpd.log FTP login attempts and successes](screenshots/image_8.png)
 
 Key findings from the FTP log:
 
@@ -150,7 +159,8 @@ Key findings from the FTP log:
 The successful logins from `192.168.10.5` with the password `IEUser@` are particularly significant. This IP matches the source IP observed in the web access logs, confirming that the attacker used the FTP service to retrieve files.
 
 **Figure 10 – FTP file access from web logs**
-`screenshots/image_7.png`
+
+![FTP file access from web logs](screenshots/image_7.png)
 
 The access logs show successful requests to:
 
@@ -167,7 +177,8 @@ Although the direct HTTP requests returned `403`, the attacker likely used the F
 The attacker successfully gained shell access to the server using SSH.
 
 **Figure 11 – SSH authentication logs**
-`screenshots/image_9.png`
+
+![SSH authentication logs](screenshots/image_9.png)
 
 The log shows:
 
@@ -187,8 +198,183 @@ The successful login from `192.168.10.5` as `www-data` confirms that the attacke
 The attacker also performed a brute-force attack against the application's login endpoint.
 
 **Figure 12 – Product reviews endpoint used for scraping**
-`screenshots/image_4.png`
+
+![Product reviews endpoint used for scraping](screenshots/image_4.png)
 
 The attacker repeatedly accessed `/rest/products/1/reviews` to scrape user email addresses. This endpoint returned user-generated content, which likely included email addresses in the review text or associated metadata.
 
-The brute-force attack was successful. Based on the logs, the successful login timestamp is:
+The brute-force attack was successful. Based on the logs, the successful login timestamp is: Yay, 11/Apr/2021:09:16:31 +0000
+---
+
+## 8. Indicators of Compromise (IoC)
+
+### Network Indicators (Internal)
+
+| Type | Value |
+|---|---|
+| Attacker IP | 192.168.10.5 |
+| Attacker IP (local) | ::ffff:127.0.0.1 |
+| Port (SSH) | 40112 |
+| Port (FTP) | 21 |
+
+### Tool Signatures
+
+| Tool | User-Agent String |
+|---|---|
+| Hydra | `(Hydra)"` |
+| sqlmap | `(http://sqlmap.org)"` |
+| nmap | `https://nmap.org/book/nse.html)` |
+| feroxbuster | `feroxbuster/2.2.1` |
+| curl | `curl/7.74.0` |
+
+### Vulnerable Endpoints
+
+| Endpoint | Vulnerability |
+|---|---|
+| `/rest/products/search` | SQL Injection (parameter: `q`) |
+| `/rest/user/login` | Brute-force attack |
+| `/rest/products/1/reviews` | Information disclosure |
+| `/rest/user/whoami` | Information disclosure |
+| `/rest/basket/1` | Information disclosure |
+
+### Files Targeted
+
+| File Path | Status |
+|---|---|
+| `/ftp/www-data.bak` | Attempted download |
+| `/ftp/coupons_2013.md.bak` | Attempted download |
+
+### Compromised Credentials
+
+| Service | Username | Password | Status |
+|---|---|---|---|
+| FTP | anonymous | IEUser@ | Compromised |
+| SSH | www-data | (unknown) | Compromised |
+
+### Attacker Timeline
+
+| Time | Activity |
+|---|---|
+| 08:13:32 – 08:16:34 | FTP enumeration and authentication attempts |
+| 09:29:16 – 09:31:04 | SQL injection reconnaissance and exploitation |
+| 09:34:33 – 09:34:43 | Directory enumeration (/ftp) |
+| 09:39:52 | SSH brute-force attempt detected |
+| 09:41:19 | Successful SSH authentication as www-data |
+
+---
+
+## 9. MITRE ATT&CK Mapping
+
+| Technique | ID | Description |
+|---|---|---|
+| **Reconnaissance** | | |
+| Active Scanning | T1595 | Attacker used nmap to scan the network |
+| Vulnerability Scanning | T1595.002 | sqlmap was used to detect SQL injection |
+| **Resource Development** | | |
+| Develop Capabilities | T1587 | Attacker used multiple tools (Hydra, sqlmap, feroxbuster) |
+| **Initial Access** | | |
+| Exploit Public-Facing Application | T1190 | SQL injection in `/rest/products/search` |
+| Brute Force | T1110 | Hydra used against login endpoint |
+| **Execution** | | |
+| Command and Scripting Interpreter | T1059 | Shell access via SSH |
+| **Persistence** | | |
+| Valid Accounts | T1078 | www-data account used for SSH |
+| **Privilege Escalation** | | |
+| Valid Accounts | T1078 | www-data may have had elevated privileges |
+| **Defense Evasion** | | |
+| Masquerading | T1036 | Legitimate tools disguised as normal traffic |
+| **Credential Access** | | |
+| Credentials from Password Stores | T1555 | Email/password extracted via SQL injection |
+| Brute Force | T1110 | Password guessing via Hydra |
+| **Discovery** | | |
+| File and Directory Discovery | T1083 | feroxbuster used to enumerate files |
+| System Information Discovery | T1082 | Endpoint probing |
+| **Collection** | | |
+| Data from Information Repositories | T1213 | Scraping user emails from reviews |
+| **Exfiltration** | | |
+| Exfiltration Over Alternative Protocol | T1048 | FTP used to download backup files |
+| **Impact** | | |
+| Data Destruction | T1485 | Potential impact from downloaded files |
+
+---
+
+## 10. Conclusion & Recommendations
+
+The investigation confirmed that the web application and server were successfully compromised through a multi-stage attack. The attacker used automated tools to identify and exploit a SQL injection vulnerability in the `/rest/products/search` endpoint, extracting user credentials (email and password) from the database. The attacker also leveraged the FTP service with anonymous credentials (`IEUser@`) to download sensitive backup files, and ultimately gained shell access via SSH as the `www-data` user.
+
+### Key Findings
+
+1. **SQL Injection** – `/rest/products/search?q=` was vulnerable to SQL injection, allowing extraction of `id`, `email`, and `password` from the Users table.
+2. **FTP Abuse** – The attacker successfully authenticated to the FTP service as `anonymous` with the password `IEUser@` and likely downloaded backup files (`www-data.bak`, `coupons_2013.md.bak`).
+3. **SSH Compromise** – The attacker gained shell access as `www-data` after exceeding the maximum retry limit and successfully authenticating.
+4. **Information Disclosure** – The attacker accessed `/rest/user/whoami`, `/rest/basket/1`, and `/rest/products/1/reviews` to gather additional user and system information.
+5. **Brute-Force Success** – The attacker successfully brute-forced the login endpoint at `11/Apr/2021:09:16:31 +0000`.
+
+### Recommended Actions
+
+**Patch Vulnerable Endpoints**
+- Implement parameterized queries for all database interactions, especially on `/rest/products/search`.
+- Sanitize and validate all user input, particularly the `q` parameter.
+
+**Strengthen Authentication**
+- Enforce strong password policies and implement account lockout after a limited number of failed login attempts.
+- Implement Multi-Factor Authentication (MFA) for all users.
+
+**Review FTP Configuration**
+- Disable anonymous FTP access if not required.
+- Implement strong password policies for FTP accounts.
+- Restrict FTP access to specific IP ranges.
+
+**Review SSH Configuration**
+- Enforce key-based authentication and disable password authentication for SSH.
+- Implement fail2ban or similar tools to block brute-force attempts.
+- Review and restrict sudo privileges for the www-data user.
+
+**Rotate Credentials**
+- Reset passwords for all user accounts, especially `www-data` and any users whose credentials may have been exposed.
+- Review and rotate any service accounts used by the application.
+
+**Implement Monitoring and Alerting**
+- Deploy Web Application Firewall (WAF) rules to detect and block SQL injection attempts.
+- Monitor authentication logs for unusual patterns (e.g., multiple failed attempts, successful logins from unexpected IPs).
+- Set up alerts for access to sensitive endpoints and file paths.
+
+**Secure Sensitive Files**
+- Ensure that backup files (`.bak`) are not accessible via the web or FTP.
+- Store backups in secure, access-controlled locations.
+
+**Conduct Forensic Analysis**
+- Perform a thorough review of the compromised system to identify any additional backdoors or persistence mechanisms.
+- Review the `www-data` account's command history and any files created or modified during the session.
+
+**User Awareness Training**
+- Educate developers on secure coding practices, particularly regarding SQL injection prevention.
+- Train system administrators on securing FTP and SSH services.
+
+---
+
+## Appendix A – Sample SQL Injection Payloads
+
+The following payloads were observed in the logs:
+
+**ORDER BY enumeration:**
+/rest/products/search?q=%20ORDER%20BY%201--%20GdNP
+/rest/products/search?q=%20ORDER%20BY%201--%20TAan
+**UNION SELECT data extraction:**
+/rest/products/search?q=%27%29%20UNION%20SELECT%20%271%27,%20%272%27,%20%273%27,%20%274%27,%20%275%27,%20%276%27,%20%277%27,%20%278%27,%20%279%27%20FROM%20Users--
+/rest/products/search?q=qwert%27%29%20UNION%20SELECT%20id,%20email,%20password,%20%274%27,%20%275%27,%20%276%27,%20%277%27,%20%278%27,%20%279%27%20FROM%20Users--
+---
+
+## Appendix B – Compromised Data
+
+Based on the SQL injection payloads, the attacker successfully retrieved the following data from the Users table:
+
+- `id` – User ID
+- `email` – User email address
+- `password` – User password (likely hashed)
+
+This data would enable the attacker to:
+
+- Log in as any user whose credentials were exposed.
+- Attempt to reuse passwords on other services.
+- Perform social engineering attacks using email addresses.
