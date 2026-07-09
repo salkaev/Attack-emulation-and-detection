@@ -3,7 +3,6 @@
 **Incident Type:** Web Application Attack / Data Exfiltration / Server Compromise
 **Status:** Completed
 **Date of Analysis:** 10 July 2026
-**Environment:** TryHackMe – Web Application & Log Analysis Lab (simulated SOC exercise)
 
 ---
 
