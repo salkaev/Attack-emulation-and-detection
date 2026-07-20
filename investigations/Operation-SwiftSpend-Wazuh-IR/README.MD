@@ -58,6 +58,7 @@ By decoding the Base64 value string `cGluZyB3d3cueW91YXJldnVsbmVyYWJsZS50aG0=`, 
 The analysis focused on privilege tracking logs, which flagged an abrupt privilege escalation attempt involving local Windows accounts and credential databases.
 
 ![Office spawning Windows Shell](screenshots/wazuh_net_user.png)
+
 *Figure 3 – The process execution tracking engine recorded a `Microsoft Office Product Spawning Windows Shell` event where the system `net.exe` application was repurposed to configure the local environment.*
 
 The specific argument passed to the system bin was recorded as follows:
@@ -90,6 +91,7 @@ This ensures that every day, the task runner wakes up, opens a minimized PowerSh
 
 The final phase of the incident capture involved auditing PowerShell network activity, which exposed data leaving the host boundaries.
 ![Suspicious PowerShell command](screenshots/sysmon_exfiltration.png)
+
 *Figure 4 – Network telemetry captured raw PowerShell execution arguments running web data posts containing target token configurations and company assets.*
 
 The script targeted the public domain `https://pastebin.com/api/`, passing an active developer authentication key string (`6nxrbM7UIJuaEuPOkH5Z8I7SvcLN30P0`). Among the exfiltrated parameters, the cleartext environment flag was isolated:
