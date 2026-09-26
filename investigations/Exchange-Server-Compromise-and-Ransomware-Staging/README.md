@@ -29,7 +29,7 @@ Analysis of IIS logs revealed multiple POST requests targeting a suspicious ASPX
 
 * **Target URI:** `/owa/auth/i3gfPctK1c2x.aspx`
 
-![IIS Logs - Web Shell Access](1.png)  
+![IIS Logs - Web Shell Access](screenshots/1.png)  
 *Figure 1 – IIS logs showing POST requests to the deployed web shell.*
 
 To ensure the web shell remained functional, the attacker used the living-off-the-land binary (LOLBin) `attrib.exe` to remove the read-only attribute from the file across the network share:
@@ -38,7 +38,7 @@ To ensure the web shell remained functional, the attacker used the living-off-th
 attrib.exe -r \\win-aoqkg2as2q7.bellybear.local\C$\Program Files\Microsoft\Exchange Server\V15\FrontEnd\HttpProxy\owa\auth\i3gfPctK1c2x.aspx
 ```
 
-![Command Line - attrib.exe](2.png)  
+![Command Line - attrib.exe](screenshots/2.png)  
 *Figure 2 – Command line execution of `attrib.exe` modifying file attributes.*
 
 ## 2. Execution & Persistence
@@ -53,7 +53,7 @@ Following the web shell deployment, the attacker spawned a command shell. Sysmon
 | **MD5** | `290C7DFB01E50CEA9E19DA81A781AF2C` |
 | **SHA256** | `53B1C1B2F41A7FC300E97D036E57539453FF82001DD3F6ABF07F4896B1F9CA22` |
 
-![Sysmon Event 1 - cmd.exe](3.png)  
+![Sysmon Event 1 - cmd.exe](screenshots/3.png)  
 *Figure 3 – Sysmon event detailing the execution of `cmd.exe` from the Administrator's Documents folder.*
 
 Immediately after, the attacker executed a command to establish persistence by creating a new local user account with administrative privileges:
@@ -63,7 +63,7 @@ C:\Windows\system32\net1 user /add securityninja hardToHack123$
 ```
 This command was executed via `net1.exe`, spawned by `net.exe`.
 
-![Sysmon Event 1 - net1.exe](4.png)  
+![Sysmon Event 1 - net1.exe](screenshots/4.png)  
 *Figure 4 – Creation of the backdoor account `securityninja`.*
 
 ## 3. Credential Access
@@ -78,7 +78,7 @@ The attacker attempted to dump credentials by injecting code into the Local Secu
 | **NewThreadId** | `13980` |
 | **StartAddress** | `0x000001D471950000` |
 
-![Sysmon Event 8 - CreateRemoteThread](5.png)  
+![Sysmon Event 8 - CreateRemoteThread](screenshots/5.png)  
 *Figure 5 – Remote thread creation indicating LSASS memory access for credential dumping.*
 
 ## 4. Ransomware Staging
@@ -90,10 +90,10 @@ The compromised `cmd.exe` process (PID 15540) began creating `readme.txt` files 
 * `C:\Users\Default\AppData\Local\readme.txt`
 * `C:\Users\Public\Downloads\readme.txt`
 
-![Sysmon Event 11 - readme.txt](6.png)  
+![Sysmon Event 11 - readme.txt](screenshots/6.png)  
 *Figure 6 – Creation of `readme.txt` in the Roaming directory.*
 
-![Sysmon Event 11 - readme.txt details](7.png)  
+![Sysmon Event 11 - readme.txt details](screenshots/7.png)  
 *Figure 7 – Creation of `readme.txt` in the Local and Public directories.*
 
 ---
