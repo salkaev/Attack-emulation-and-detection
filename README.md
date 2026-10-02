@@ -1,6 +1,16 @@
-## Investigation Categories
+# Security Investigation Library
+
+Welcome to my security investigation portfolio. This repository contains a collection of end-to-end incident response and threat hunting cases. 
+
+Each case documents the full incident response workflow: from alert validation and data collection through analysis, IOC extraction, MITRE ATT&CK mapping, to remediation recommendations.
+
+The investigations cover various attack scenarios including web application exploitation, malware command-and-control, phishing, lateral movement, privilege escalation, and credential theft. All cases are based on realistic simulations, CTF challenges, and lab environments.
 
 *(This library is actively maintained and updated with new cases)*
+
+---
+
+## Investigation Categories
 
 ### Web Application Security
 *   [Web-Application-Exploitation-and-Remote-File-Inclusion-(RFI)](./investigations/Web-Application-Exploitation-and-Remote-File-Inclusion-(RFI)) – RFI, XSS, Reverse Shell
@@ -26,3 +36,28 @@
 *   [Incident-Investigation-Report-The-Boogeyman-Trilogy](./investigations/Incident-Investigation-Report-The-Boogeyman-Trilogy)
 *   [malware-Command-and-Control-Investigation](./investigations/malware-Command-and-Control-Investigation)
 *   [swiftspend-finance-malware](./investigations/swiftspend-finance-malware)
+
+---
+
+## Tools & Technologies
+
+*   **Network Analysis:** Wireshark, tcpdump
+*   **Threat Intelligence:** VirusTotal, MISP, AbuseIPDB
+*   **Malware Analysis:** PE-studio, strings, hash calculators
+*   **SIEM and Logging:** Splunk Enterprise, Wazuh, Sysmon, Windows Event Logs, PowerShell logging
+*   **Frameworks:** MITRE ATT&CK, Cyber Kill Chain
+
+---
+
+## Skills Demonstrated
+
+*   Incident triage and alert validation
+*   Network traffic analysis (PCAP)
+*   Host-based forensics (processes, registry, file system)
+*   Threat intelligence correlation
+*   IOC extraction and management
+*   Detection engineering (SPL, rule logic)
+*   MITRE ATT&CK alignment
+*   Technical report writing
+
+---
