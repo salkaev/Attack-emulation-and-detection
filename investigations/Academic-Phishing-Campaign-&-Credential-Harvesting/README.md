@@ -33,6 +33,7 @@ Analysis of the email headers revealed that the attacker spoofed a legitimate ac
 The absence of a DMARC policy (`DMARC=none`) explicitly explains why the email platform did not reject the message.
 
 ![Email Header Analysis](screenshots/1.png)  
+
 *Figure 1 – Email headers showing the absence of SPF, DKIM, and DMARC records.*
 
 ## 2. Attachment Analysis
@@ -48,6 +49,7 @@ The email contained a malicious attachment designed to look like a standard docu
 The double extension (`.pdf.html`) is a common social engineering tactic to trick the user into executing an HTML file, which opens in the browser rather than a PDF reader. The MD5 hash was calculated using the `md5sum` command in the Linux terminal.
 
 ![MD5 Hash Calculation](screenshots/2.png)  
+
 *Figure 2 – Calculation of the MD5 hash for the malicious HTML attachment.*
 
 ## 3. Payload Deobfuscation & Execution
@@ -55,6 +57,7 @@ The double extension (`.pdf.html`) is a common social engineering tactic to tric
 Upon opening the HTML file, the browser executes heavily obfuscated JavaScript. The script uses Unicode escape sequences stored in arrays named `xanthium` and `egassem` to hide its true intent. 
 
 ![Obfuscated JavaScript Code](screenshots/3.png)  
+
 *Figure 3 – Obfuscated JavaScript arrays within the HTML file.*
 
 * **Hidden Attacker Message:** Decoding the `egassem` array reveals the attacker's taunt: `I love to phish books from libraries ^^`
@@ -65,6 +68,7 @@ Upon opening the HTML file, the browser executes heavily obfuscated JavaScript. 
 The script dynamically appends a new script element to the document body, forcing a redirect to the first URL in the chain: `http://liibrarytlu-13cwe32432.com:8082` (Punycode: `http://xn--librarytlu-13cwe32432-kwr.com:8082`). A Node.js script (`decode.js`) was used to simulate the JavaScript execution and extract the final URL.
 
 ![Decoded URL Output](screenshots/4.png)  
+
 *Figure 4 – Execution of the decoding script revealing the first redirect URL.*
 
 ## 4. Infrastructure & Threat Intel Correlation
@@ -80,6 +84,7 @@ Analysis of `lib-service.com` via threat intelligence tools reveals:
 The domain `lib-service.com` is explicitly associated with known malicious infrastructure used by state-sponsored actors targeting universities and research entities.
 
 ![Threat Intelligence Dashboard](screenshots/5.png)  
+
 *Figure 5 – Threat intelligence dashboard showing domain reputation and attribution.*
 
 ## 5. Threat Actor Profile
@@ -88,7 +93,8 @@ The domain `lib-service.com` is explicitly associated with known malicious infra
 * **Target:** Research and Proprietary Data
 * **Objective:** The primary goal of this campaign is cyberespionage, specifically targeting academic and intellectual property to steal research data.
 
-![MITRE ATT&CK Silent Librarian](screenshots/6.png)  
+![MITRE ATT&CK Silent Librarian](screenshots/6.png) 
+ 
 *Figure 6 – MITRE ATT&CK page for Silent Librarian (G0122) detailing associated groups and techniques.*
 
 ---
